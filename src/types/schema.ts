@@ -48,7 +48,7 @@ export interface ScriptAction {
  */
 export interface FetchAction {
   fetch: string;
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | string; // 支持表达式
   headers?: Record<string, any>;
   /** 查询参数（GET 请求） */
   params?: Record<string, any>;
