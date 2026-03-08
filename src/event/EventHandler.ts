@@ -950,7 +950,7 @@ export class EventHandler implements IEventHandler {
    * 优先使用 Clipboard API，降级到 execCommand
    */
   private async copyToClipboard(text: string): Promise<void> {
-    // 方案1：使用现代 Clipboard API（需要 HTTPS 或 localhost）
+    // 优先使用 Clipboard API（现代浏览器，需要 document 有焦点）
     if (navigator?.clipboard?.writeText) {
       try {
         await navigator.clipboard.writeText(text);
@@ -960,23 +960,22 @@ export class EventHandler implements IEventHandler {
       }
     }
 
-    // 方案2：降级到 execCommand（兼容旧浏览器）
+    // 降级到 execCommand
     const textarea = document.createElement('textarea');
     textarea.value = text;
-    
-    // 防止页面滚动
     textarea.style.position = 'fixed';
     textarea.style.left = '-9999px';
     textarea.style.top = '-9999px';
     textarea.style.opacity = '0';
     
-    document.body.appendChild(textarea);
+    // 将 textarea 插入到当前活动元素的父容器中，而不是 document.body
+    // 这样在 Modal/Drawer 等使用焦点陷阱的场景下，textarea 仍在焦点陷阱范围内
+    const container = document.activeElement?.parentElement || document.body;
+    container.appendChild(textarea);
     
     try {
       textarea.focus();
       textarea.select();
-      
-      // 尝试选中文本（兼容 iOS）
       textarea.setSelectionRange(0, textarea.value.length);
       
       const success = document.execCommand('copy');
@@ -984,7 +983,7 @@ export class EventHandler implements IEventHandler {
         throw new Error('execCommand copy 失败');
       }
     } finally {
-      document.body.removeChild(textarea);
+      container.removeChild(textarea);
     }
   }
 
