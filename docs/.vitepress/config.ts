@@ -6,7 +6,7 @@ export default defineConfig({
   description: 'Vue 3 JSON Schema 动态 UI 渲染器',
   
   head: [
-    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/logo.svg' }],
+    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/vschema/logo.svg' }],
   ],
 
   locales: {
