@@ -1,12 +1,12 @@
 import { defineConfig } from 'vitepress';
 
 export default defineConfig({
-  base: '/vschema/',
+  base: '/vschema-ui/',
   title: 'VSchema',
   description: 'Vue 3 JSON Schema 动态 UI 渲染器',
   
   head: [
-    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/vschema/logo.svg' }],
+    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/vschema-ui/logo.svg' }],
   ],
 
   locales: {
