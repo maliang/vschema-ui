@@ -401,44 +401,6 @@ describe('Property 14: Expression Error Handling', () => {
 
 // 额外的辅助方法测试
 describe('ExpressionEvaluator - Helper Methods', () => {
-  describe('getByPath', () => {
-    it('should get nested property by path', () => {
-      const obj = { a: { b: { c: 42 } } };
-      expect(evaluator.getByPath(obj, 'a.b.c')).toBe(42);
-    });
-
-    it('should handle array index in path', () => {
-      const obj = { items: [{ name: 'first' }, { name: 'second' }] };
-      expect(evaluator.getByPath(obj, 'items[0].name')).toBe('first');
-      expect(evaluator.getByPath(obj, 'items[1].name')).toBe('second');
-    });
-
-    it('should return undefined for non-existent path', () => {
-      const obj = { a: 1 };
-      expect(evaluator.getByPath(obj, 'b.c.d')).toBeUndefined();
-    });
-  });
-
-  describe('setByPath', () => {
-    it('should set nested property by path', () => {
-      const obj: any = { a: { b: {} } };
-      evaluator.setByPath(obj, 'a.b.c', 42);
-      expect(obj.a.b.c).toBe(42);
-    });
-
-    it('should create intermediate objects', () => {
-      const obj: any = {};
-      evaluator.setByPath(obj, 'a.b.c', 42);
-      expect(obj.a.b.c).toBe(42);
-    });
-
-    it('should handle array index in path', () => {
-      const obj: any = { items: [] };
-      evaluator.setByPath(obj, 'items[0]', { name: 'first' });
-      expect(obj.items[0]).toEqual({ name: 'first' });
-    });
-  });
-
   describe('isSafe', () => {
     it('should return true for safe expressions', () => {
       expect(evaluator.isSafe('a + b')).toBe(true);

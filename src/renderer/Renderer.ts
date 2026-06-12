@@ -151,12 +151,12 @@ export class Renderer {
         // 创建 $loading 响应式状态（用于 initApi）
         const $loading: Ref<boolean> = ref(false);
         // 将 $loading 注入到 runtimeContext.state 中
-        // 使用 Object.defineProperty 使其在模板中可以直接访问值
+        // 使用 Object.defineProperty + configurable:false 防止 SetAction 覆盖
         Object.defineProperty(runtimeContext.state, '$loading', {
           get: () => $loading.value,
           set: (val: boolean) => { $loading.value = val; },
           enumerable: true,
-          configurable: true,
+          configurable: false,
         });
 
         // 创建 $uiLoading 响应式状态（用于 uiApi）
@@ -166,7 +166,7 @@ export class Renderer {
           get: () => $uiLoading.value,
           set: (val: boolean) => { $uiLoading.value = val; },
           enumerable: true,
-          configurable: true,
+          configurable: false,
         });
 
         // 创建 dynamicChildren 响应式状态（用于存储 uiApi 返回的动态子节点）
@@ -252,13 +252,17 @@ export class Renderer {
     // onUnmounted 钩子 - 同时清理状态管理器和 WebSocket 连接
     onUnmounted(() => {
       // 先执行用户定义的 onUnmounted 动作
-      if (node.onUnmounted) {
-        this.executeLifecycleActions(node.onUnmounted, actionContext, eventHandler);
+      // 用 try/finally 确保清理逻辑不被用户代码抛出的异常中断
+      try {
+        if (node.onUnmounted) {
+          this.executeLifecycleActions(node.onUnmounted, actionContext, eventHandler);
+        }
+      } finally {
+        // 清理状态管理器（停止监听器等）
+        stateManager.dispose();
+        // 清理 WebSocket 连接
+        eventHandler.dispose();
       }
-      // 清理状态管理器（停止监听器等）
-      stateManager.dispose();
-      // 清理 WebSocket 连接
-      eventHandler.dispose();
     });
   }
 

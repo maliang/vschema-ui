@@ -162,7 +162,7 @@ export class StateManager implements IStateManager {
   }
 
   /**
-   * 检查是否为 Action 类型
+   * 检查是否为 Action 类型（匹配所有 8 种动作）
    */
   private isAction(config: any): boolean {
     return (
@@ -170,7 +170,10 @@ export class StateManager implements IStateManager {
       'call' in config ||
       'emit' in config ||
       'fetch' in config ||
-      ('if' in config && 'then' in config)
+      'if' in config ||
+      'script' in config ||
+      'ws' in config ||
+      'copy' in config
     );
   }
 
@@ -203,11 +206,51 @@ export class StateManager implements IStateManager {
     };
 
     for (const action of actions) {
-      // 每次执行前再次检查，以防在执行过程中被销毁
-      if (this.isDisposed) {
-        return;
+      if (this.isDisposed) return;
+
+      // 优先使用 EventHandler（支持全部 8 种动作类型）
+      if (context.eventHandler) {
+        await context.eventHandler.executeAction(action, watchContext);
+      } else {
+        // 回退：内联处理基本动作类型（兼容测试环境等无 eventHandler 的场景）
+        await this.executeInlineAction(action, watchContext);
       }
-      await this.executeAction(action, watchContext);
+    }
+  }
+
+  /**
+   * 内联执行单个动作（回退方案，仅在 context.eventHandler 不可用时使用）
+   * 支持最基本的动作类型：set / call / emit / if
+   */
+  private async executeInlineAction(action: Action, context: ActionContext): Promise<void> {
+    if ('set' in action) {
+      const setAction = action as { set: string; value: any };
+      let value = setAction.value;
+      if (typeof value === 'string' && this.evaluator.isTemplateExpression(value)) {
+        value = this.evaluator.evaluateTemplate(value, { state: context.state, computed: context.computed });
+      }
+      context.stateManager.setState(setAction.set, value);
+    } else if ('call' in action) {
+      const callAction = action as { call: string; args?: any[] };
+      const method = resolveMethod(callAction.call, [context.methods, context.state]);
+      if (method) {
+        await method(...(callAction.args || []));
+      } else {
+        console.warn(`Method "${callAction.call}" not found`);
+      }
+    } else if ('emit' in action) {
+      const emitAction = action as { emit: string; payload?: any };
+      context.emit(emitAction.emit, emitAction.payload);
+    } else if ('if' in action && 'then' in action) {
+      const ifAction = action as { if: string; then: Action | Action[]; else?: Action | Action[] };
+      const conditionResult = this.evaluator.evaluate(ifAction.if, { state: context.state, computed: context.computed });
+      const branch = conditionResult.success && conditionResult.value ? ifAction.then : ifAction.else;
+      if (branch) {
+        const branchActions = Array.isArray(branch) ? branch : [branch];
+        for (const ba of branchActions) {
+          await this.executeInlineAction(ba, context);
+        }
+      }
     }
   }
 
@@ -217,62 +260,6 @@ export class StateManager implements IStateManager {
    */
   private getValueByPath(obj: any, path: string): any {
     return getByPath(obj, path);
-  }
-
-  /**
-   * 执行单个动作
-   */
-  private async executeAction(action: Action, context: ActionContext): Promise<void> {
-    if ('set' in action) {
-      // SetAction
-      const setAction = action as { set: string; value: any };
-      let value = setAction.value;
-
-      // 如果值是表达式，求值
-      if (typeof value === 'string' && this.evaluator.isTemplateExpression(value)) {
-        value = this.evaluator.evaluateTemplate(value, {
-          state: context.state,
-          computed: context.computed,
-        });
-      }
-
-      context.stateManager.setState(setAction.set, value);
-    } else if ('call' in action) {
-      // CallAction
-      const callAction = action as { call: string; args?: any[] };
-      
-      // 使用工具函数查找方法（支持嵌套路径，如 "$methods.$nav.push"）
-      const method = resolveMethod(callAction.call, [context.methods, context.state]);
-      
-      if (method) {
-        await method(...(callAction.args || []));
-      } else {
-        console.warn(`Method "${callAction.call}" not found`);
-      }
-    } else if ('emit' in action) {
-      // EmitAction
-      const emitAction = action as { emit: string; payload?: any };
-      context.emit(emitAction.emit, emitAction.payload);
-    } else if ('if' in action && 'then' in action) {
-      // IfAction
-      const ifAction = action as { if: string; then: Action | Action[]; else?: Action | Action[] };
-      const conditionResult = this.evaluator.evaluate(ifAction.if, {
-        state: context.state,
-        computed: context.computed,
-      });
-
-      if (conditionResult.success && conditionResult.value) {
-        const thenActions = Array.isArray(ifAction.then) ? ifAction.then : [ifAction.then];
-        for (const thenAction of thenActions) {
-          await this.executeAction(thenAction, context);
-        }
-      } else if (ifAction.else) {
-        const elseActions = Array.isArray(ifAction.else) ? ifAction.else : [ifAction.else];
-        for (const elseAction of elseActions) {
-          await this.executeAction(elseAction, context);
-        }
-      }
-    }
   }
 
   /**

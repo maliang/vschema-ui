@@ -10,6 +10,7 @@ import type {
 } from '../types/runtime';
 import type { GlobalConfig, RequestConfig, ResponseFormatConfig } from '../types/config';
 import type { FetchAction } from '../types/schema';
+import { ApiError } from '../types/errors';
 
 /**
  * 默认响应格式配置
@@ -236,9 +237,10 @@ export class DataFetcher implements IDataFetcher {
           errorData = await response.text();
         }
         
-        const error = new Error(`HTTP ${response.status}: ${response.statusText}`);
-        (error as any).status = response.status;
-        (error as any).response = errorData;
+        const error = new ApiError(`HTTP ${response.status}: ${response.statusText}`, {
+          status: response.status,
+          response: errorData,
+        });
 
         // 执行错误拦截器
         if (this.config.errorInterceptor) {
@@ -335,9 +337,10 @@ export class DataFetcher implements IDataFetcher {
           if (!this.isSuccessCode(businessCode)) {
             // 业务状态码表示失败
             const msg = this.getResponseField(data, format.msgField) || '请求失败';
-            const error = new Error(msg);
-            (error as any).code = businessCode;
-            (error as any).response = data;
+            const error = new ApiError(msg, {
+              code: businessCode,
+              response: data,
+            });
 
             // 执行错误拦截器
             if (this.config.errorInterceptor) {

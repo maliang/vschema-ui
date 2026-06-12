@@ -68,6 +68,27 @@ export class JsonRendererException extends Error {
 }
 
 /**
+ * API 错误类 - 用于 HTTP 请求和业务逻辑错误
+ * 替代 DataFetcher 中 (error as any).status / .code / .response 的用法
+ */
+export class ApiError extends Error {
+  /** HTTP 状态码 */
+  public readonly status?: number;
+  /** 业务状态码 */
+  public readonly code?: number | string;
+  /** 原始响应数据 */
+  public readonly response?: any;
+
+  constructor(message: string, options?: { status?: number; code?: number | string; response?: any }) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = options?.status;
+    this.code = options?.code;
+    this.response = options?.response;
+  }
+}
+
+/**
  * Create a parse error
  */
 export function createParseError(

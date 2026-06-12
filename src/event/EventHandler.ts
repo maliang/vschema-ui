@@ -165,17 +165,25 @@ export class EventHandler implements IEventHandler {
    */
   createHandler(action: Action | Action[], context: ActionContext): Function {
     return async (event?: Event) => {
+      // 保存上一个 $event，支持嵌套/交错调用的栈恢复
+      // 防止快速连续事件互相覆盖（竞态条件）
+      const prevEvent = context.state.$event;
       // 将 $event 直接添加到原始 state 中，保持响应式
-      // 注意：不能使用展开运算符创建新对象，否则会丢失响应式
       context.state.$event = event;
 
-      await this.executeActions(
-        Array.isArray(action) ? action : [action],
-        context
-      );
-
-      // 清理 $event
-      delete context.state.$event;
+      try {
+        await this.executeActions(
+          Array.isArray(action) ? action : [action],
+          context
+        );
+      } finally {
+        // 恢复上一个 $event，确保外层 handler 不受影响
+        if (prevEvent === undefined) {
+          delete context.state.$event;
+        } else {
+          context.state.$event = prevEvent;
+        }
+      }
     };
   }
 
@@ -226,17 +234,24 @@ export class EventHandler implements IEventHandler {
         }
       }
 
+      // 保存上一个 $event，支持嵌套/交错调用的栈恢复
+      const prevEvent = context.state.$event;
       // 将 $event 直接添加到原始 state 中，保持响应式
-      // 注意：不能使用展开运算符创建新对象，否则会丢失响应式
       context.state.$event = event;
 
-      await this.executeActions(
-        Array.isArray(action) ? action : [action],
-        context
-      );
-
-      // 清理 $event
-      delete context.state.$event;
+      try {
+        await this.executeActions(
+          Array.isArray(action) ? action : [action],
+          context
+        );
+      } finally {
+        // 恢复上一个 $event
+        if (prevEvent === undefined) {
+          delete context.state.$event;
+        } else {
+          context.state.$event = prevEvent;
+        }
+      }
     };
   }
 
@@ -755,43 +770,52 @@ export class EventHandler implements IEventHandler {
       );
 
       if (result.success && action.then) {
-        // 成功回调 - 添加 $response 到上下文
-        const successContext: ActionContext = {
-          ...context,
-          state: {
-            ...context.state,
-            $response: result.response || result.data,
-          },
-        };
+        // 成功回调 - save/restore 模式，避免 $response 竞态条件
+        const prevResponse = context.state.$response;
+        context.state.$response = result.response || result.data;
 
-        const thenActions = Array.isArray(action.then) ? action.then : [action.then];
-        await this.executeActions(thenActions, successContext);
+        try {
+          const thenActions = Array.isArray(action.then) ? action.then : [action.then];
+          await this.executeActions(thenActions, context);
+        } finally {
+          if (prevResponse === undefined) {
+            delete context.state.$response;
+          } else {
+            context.state.$response = prevResponse;
+          }
+        }
       } else if (!result.success && action.catch) {
-        // 错误回调 - 添加 $error 到上下文
-        const errorContext: ActionContext = {
-          ...context,
-          state: {
-            ...context.state,
-            $error: result.error,
-          },
-        };
+        // 错误回调 - save/restore 模式，避免 $error 竞态条件
+        const prevError = context.state.$error;
+        context.state.$error = result.error;
 
-        const catchActions = Array.isArray(action.catch) ? action.catch : [action.catch];
-        await this.executeActions(catchActions, errorContext);
+        try {
+          const catchActions = Array.isArray(action.catch) ? action.catch : [action.catch];
+          await this.executeActions(catchActions, context);
+        } finally {
+          if (prevError === undefined) {
+            delete context.state.$error;
+          } else {
+            context.state.$error = prevError;
+          }
+        }
       }
     } catch (error) {
       // 网络错误等
       if (action.catch) {
-        const errorContext: ActionContext = {
-          ...context,
-          state: {
-            ...context.state,
-            $error: error,
-          },
-        };
+        const prevError = context.state.$error;
+        context.state.$error = error;
 
-        const catchActions = Array.isArray(action.catch) ? action.catch : [action.catch];
-        await this.executeActions(catchActions, errorContext);
+        try {
+          const catchActions = Array.isArray(action.catch) ? action.catch : [action.catch];
+          await this.executeActions(catchActions, context);
+        } finally {
+          if (prevError === undefined) {
+            delete context.state.$error;
+          } else {
+            context.state.$error = prevError;
+          }
+        }
       } else {
         console.error('Fetch（网络请求）出错：', error);
       }
@@ -893,7 +917,6 @@ export class EventHandler implements IEventHandler {
       await fn(...paramValues);
     } catch (error) {
       console.error('ScriptAction（脚本动作）执行出错：', error);
-      console.error('脚本（Script）：', script);
     }
   }
 

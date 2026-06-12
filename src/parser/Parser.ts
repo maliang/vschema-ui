@@ -378,13 +378,27 @@ export class Parser implements IParser {
 
     // model 指令
     if (obj.model !== undefined) {
-      if (typeof obj.model !== 'string') {
+      if (typeof obj.model === 'string') {
+        node.model = obj.model;
+      } else if (typeof obj.model === 'object' && obj.model !== null && !Array.isArray(obj.model)) {
+        // 对象格式：{ "modelValue": "data.trim", "columns": "cols" }
+        const validObj: Record<string, string> = {};
+        for (const [key, value] of Object.entries(obj.model)) {
+          if (typeof value !== 'string') {
+            this.errors.push({
+              path: this.joinPath(path, `model.${key}`),
+              message: 'model 对象中各字段的值必须是字符串路径'
+            });
+          } else {
+            validObj[key] = value;
+          }
+        }
+        node.model = validObj;
+      } else {
         this.errors.push({
           path: this.joinPath(path, 'model'),
-          message: 'model 必须是字符串'
+          message: 'model 必须是字符串或对象 { key: path }'
         });
-      } else {
-        node.model = obj.model;
       }
     }
 
@@ -542,16 +556,92 @@ export class Parser implements IParser {
    * 验证 API 配置（initApi 和 uiApi）
    * 支持字符串格式（仅 URL）或对象格式（完整配置）
    */
-  private validateApiConfig(obj: any, node: JsonNode, _path: string): void {
-    // 验证 initApi
-    if (obj.initApi !== undefined) {
-      node.initApi = obj.initApi;
-    }
+  private validateApiConfig(obj: any, node: JsonNode, path: string): void {
+    const validateOne = (key: 'initApi' | 'uiApi', value: any) => {
+      if (value === undefined) return;
 
-    // 验证 uiApi
-    if (obj.uiApi !== undefined) {
-      node.uiApi = obj.uiApi;
-    }
+      if (typeof value === 'string') {
+        // 字符串格式：仅 URL
+        if (!value.trim()) {
+          this.errors.push({
+            path: this.joinPath(path, key),
+            message: `${key} 字符串不能为空`
+          });
+          return;
+        }
+        node[key] = value;
+        return;
+      }
+
+      if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        // 对象格式：完整配置
+        if (typeof value.url !== 'string' || !value.url.trim()) {
+          this.errors.push({
+            path: this.joinPath(path, `${key}.url`),
+            message: 'url 是必需的字符串'
+          });
+          return;
+        }
+
+        const validated: any = { url: value.url };
+
+        if (value.method !== undefined) {
+          if (!['GET', 'POST', 'PUT', 'DELETE', 'PATCH'].includes(value.method)) {
+            this.errors.push({
+              path: this.joinPath(path, `${key}.method`),
+              message: 'method 必须是 GET, POST, PUT, DELETE 或 PATCH'
+            });
+          } else {
+            validated.method = value.method;
+          }
+        }
+
+        if (value.headers !== undefined) {
+          if (typeof value.headers !== 'object' || value.headers === null || Array.isArray(value.headers)) {
+            this.errors.push({
+              path: this.joinPath(path, `${key}.headers`),
+              message: 'headers 必须是一个对象'
+            });
+          } else {
+            validated.headers = value.headers;
+          }
+        }
+
+        if (value.body !== undefined) {
+          validated.body = value.body;
+        }
+
+        if (value.ignoreBaseURL !== undefined) {
+          if (typeof value.ignoreBaseURL !== 'boolean') {
+            this.errors.push({
+              path: this.joinPath(path, `${key}.ignoreBaseURL`),
+              message: 'ignoreBaseURL 必须是布尔值'
+            });
+          } else {
+            validated.ignoreBaseURL = value.ignoreBaseURL;
+          }
+        }
+
+        if (value.then !== undefined) {
+          validated.then = this.validateActionOrActions(value.then, this.joinPath(path, `${key}.then`));
+        }
+
+        if (value.catch !== undefined) {
+          validated.catch = this.validateActionOrActions(value.catch, this.joinPath(path, `${key}.catch`));
+        }
+
+        node[key] = validated;
+        return;
+      }
+
+      this.errors.push({
+        path: this.joinPath(path, key),
+        message: `${key} 必须是字符串（URL）或对象 { url, method?, ... }`
+      });
+    };
+
+    validateOne('initApi', obj.initApi);
+    validateOne('uiApi', obj.uiApi);
   }
 
   /**

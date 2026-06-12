@@ -28,6 +28,7 @@ const DANGEROUS_KEYWORDS = [
   'import',
   'module',
   'exports',
+  'this',
   'setTimeout',
   'setInterval',
   'setImmediate',
@@ -419,83 +420,6 @@ export class ExpressionEvaluator implements IExpressionEvaluator {
   }
 
   /**
-   * 通过路径获取嵌套属性值
-   * @param obj 对象
-   * @param path 路径，如 "user.profile.name"
-   * @returns 属性值
-   */
-  getByPath(obj: any, path: string): any {
-    if (!obj || !path) return undefined;
-
-    const parts = path.split('.');
-    let current = obj;
-
-    for (const part of parts) {
-      if (current === null || current === undefined) {
-        return undefined;
-      }
-
-      // 处理数组索引，如 "items[0]"
-      const arrayMatch = part.match(/^(\w+)\[(\d+)\]$/);
-      if (arrayMatch) {
-        const [, prop, index] = arrayMatch;
-        current = current[prop]?.[parseInt(index, 10)];
-      } else {
-        current = current[part];
-      }
-    }
-
-    return current;
-  }
-
-  /**
-   * 通过路径设置嵌套属性值
-   * @param obj 对象
-   * @param path 路径
-   * @param value 值
-   */
-  setByPath(obj: any, path: string, value: any): void {
-    if (!obj || !path) return;
-
-    const parts = path.split('.');
-    let current = obj;
-
-    for (let i = 0; i < parts.length - 1; i++) {
-      const part = parts[i];
-
-      // 处理数组索引
-      const arrayMatch = part.match(/^(\w+)\[(\d+)\]$/);
-      if (arrayMatch) {
-        const [, prop, index] = arrayMatch;
-        if (!current[prop]) {
-          current[prop] = [];
-        }
-        if (!current[prop][parseInt(index, 10)]) {
-          current[prop][parseInt(index, 10)] = {};
-        }
-        current = current[prop][parseInt(index, 10)];
-      } else {
-        if (!current[part]) {
-          current[part] = {};
-        }
-        current = current[part];
-      }
-    }
-
-    const lastPart = parts[parts.length - 1];
-    const arrayMatch = lastPart.match(/^(\w+)\[(\d+)\]$/);
-    if (arrayMatch) {
-      const [, prop, index] = arrayMatch;
-      if (!current[prop]) {
-        current[prop] = [];
-      }
-      current[prop][parseInt(index, 10)] = value;
-    } else {
-      current[lastPart] = value;
-    }
-  }
-
-  /**
    * 求值表达式，失败时返回默认值
    * @param expression 表达式字符串
    * @param context 求值上下文
@@ -521,6 +445,14 @@ export class ExpressionEvaluator implements IExpressionEvaluator {
    */
   isSafe(expression: string): boolean {
     return this.checkSecurity(expression).valid;
+  }
+
+  /**
+   * 清除表达式编译缓存
+   * 当应用动态生成大量表达式时调用，防止内存泄漏
+   */
+  clearCache(): void {
+    expressionCache.clear();
   }
 }
 
