@@ -194,6 +194,7 @@ export function createVSchemaPlugin(options: PluginOptions = {}): Plugin {
         baseURL: options.baseURL,
         defaultHeaders: options.defaultHeaders,
         responseFormat: options.responseFormat,
+        modelAdapters: options.modelAdapters,
       };
 
       const registry = new ComponentRegistry();
@@ -208,6 +209,7 @@ export function createVSchemaPlugin(options: PluginOptions = {}): Plugin {
       globalRenderer = createRenderer({
         registry,
         fetcher,
+        modelAdapters: options.modelAdapters,
       });
 
       const VSchemaComponent = createVSchemaComponent(globalRenderer);

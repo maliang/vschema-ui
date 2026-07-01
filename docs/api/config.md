@@ -162,6 +162,51 @@ errorInterceptor: (error) => {
 }
 ```
 
+### modelAdapters
+
+- 类型：`Record<string, ModelAdapter>`
+- 默认值：`{}`
+
+组件模型绑定适配器表（组件名 → 适配器），用于覆盖某个组件 `model`（v-model）的默认绑定方式。
+
+默认情况下，渲染器把 `model` 绑定到组件的 `value`/`modelValue`，并监听 `onUpdate:value`/`onUpdate:modelValue`。当某些组件对值类型有特殊要求时（例如 naive-ui 的时间/日期选择器的 `value` 必须是时间戳或 `null`，直接绑定字符串或空串会导致其内部格式化抛出 `RangeError: Invalid time value`），可为该组件名注册适配器，指定改用哪个 prop/event，以及状态为空时应传入组件的值。
+
+::: tip 通用机制
+vschema-ui 核心不感知任何具体 UI 库的组件名，`modelAdapters` 只是通用扩展点；具体 UI 库（如 naive-ui）的绑定策略由使用方注册。
+:::
+
+**ModelAdapter 字段：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `prop` | `string` | 绑定的 prop 名，默认 `'value'` |
+| `event` | `string` | 更新事件名，默认 `onUpdate:${prop}` |
+| `emptyValue` | `any` | 状态值为空（`''`/`null`/`undefined`）时传给组件的值，默认沿用原值 |
+| `when` | `(value: any) => boolean` | 仅当返回 `true` 时启用该适配器；不设则总是启用 |
+
+**示例（naive-ui 时间/日期选择器）：**
+
+```typescript
+app.use(createVSchemaPlugin({
+  modelAdapters: {
+    NTimePicker: {
+      prop: 'formatted-value',
+      event: 'onUpdate:formattedValue',
+      emptyValue: null,
+      when: (v) => typeof v === 'string' || v == null,
+    },
+    NDatePicker: {
+      prop: 'formatted-value',
+      event: 'onUpdate:formattedValue',
+      emptyValue: null,
+      when: (v) => typeof v === 'string' || v == null,
+    },
+  },
+}));
+```
+
+这样绑定字符串时间/日期或空值时，`NTimePicker`/`NDatePicker` 不会再抛出 `RangeError: Invalid time value`。
+
 ## 类型定义
 
 ```typescript
@@ -196,6 +241,22 @@ interface RequestConfig {
   method: string;
   headers: Record<string, string>;
   body?: any;
+  /** 响应类型：json（默认）、text、blob、arrayBuffer */
+  responseType?: 'json' | 'text' | 'blob' | 'arrayBuffer';
+}
+
+/**
+ * 组件模型绑定适配器
+ */
+interface ModelAdapter {
+  /** 绑定的 prop 名，默认 'value' */
+  prop?: string;
+  /** 更新事件名，默认 `onUpdate:${prop}` */
+  event?: string;
+  /** 状态为空（''/null/undefined）时传给组件的值，默认沿用原值 */
+  emptyValue?: any;
+  /** 仅当返回 true 时启用该适配器；不设则总是启用 */
+  when?: (value: any) => boolean;
 }
 
 /**
@@ -209,5 +270,6 @@ interface GlobalConfig {
   requestInterceptor?: (config: RequestConfig) => RequestConfig | Promise<RequestConfig>;
   responseInterceptor?: (response: any) => any | Promise<any>;
   errorInterceptor?: (error: any) => any | Promise<any>;
+  modelAdapters?: Record<string, ModelAdapter>;
   components?: Record<string, Component>;
 }

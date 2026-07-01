@@ -23,6 +23,7 @@ import {
 } from 'vue';
 import type { JsonNode, Action, SlotDefinition, ApiConfig, ApiConfigObject, FetchAction } from '../types/schema';
 import { isSlotDefinition as checkSlotDefinition } from '../types/schema';
+import type { ModelAdapter } from '../types/config';
 import type {
   IComponentRegistry,
   EvaluationContext,
@@ -86,6 +87,8 @@ export interface RendererOptions {
   eventHandler?: EventHandler;
   /** 数据获取器 */
   fetcher?: DataFetcher;
+  /** 组件模型绑定适配器表（通用机制，具体 UI 库策略由消费方注册） */
+  modelAdapters?: Record<string, ModelAdapter>;
 }
 
 
@@ -97,12 +100,14 @@ export class Renderer {
   private evaluator: ExpressionEvaluator;
   private eventHandler: EventHandler;
   private fetcher: DataFetcher;
+  private modelAdapters: Record<string, ModelAdapter>;
 
   constructor(options: RendererOptions = {}) {
     this.registry = options.registry || new ComponentRegistry();
     this.evaluator = options.evaluator || new ExpressionEvaluator();
     this.eventHandler = options.eventHandler || new EventHandler();
     this.fetcher = options.fetcher || new DataFetcher();
+    this.modelAdapters = options.modelAdapters || {};
   }
 
   /**
@@ -677,10 +682,14 @@ export class Renderer {
     // 处理 v-model（支持字符串或对象格式）
     if (node.model) {
       const inputType = node.props?.type;
-      
+      // 原生 HTML 标签（resolveComponent 返回字符串）才绑定原生 onInput/onChange；
+      // Vue 组件（如 naive-ui 的 NInputNumber）仅依赖 onUpdate:value/onUpdate:modelValue，
+      // 避免内部原生 input 事件冒泡把原始字符串写回 state 导致无法输入。
+      const isNativeTag = typeof component === 'string';
+
       if (typeof node.model === 'string') {
         // 字符串格式：简单 v-model
-        const modelHandlers = this.resolveModel(node.model, runtimeContext, evalContext, inputType);
+        const modelHandlers = this.resolveModel(node.model, runtimeContext, evalContext, inputType, isNativeTag, componentName);
         Object.assign(props, modelHandlers.props);
         Object.assign(eventHandlers, modelHandlers.events);
       } else {
@@ -688,7 +697,7 @@ export class Renderer {
         for (const [arg, path] of Object.entries(node.model)) {
           if (arg === 'modelValue') {
             // modelValue 作为默认 v-model 处理
-            const modelHandlers = this.resolveModel(path, runtimeContext, evalContext, inputType);
+            const modelHandlers = this.resolveModel(path, runtimeContext, evalContext, inputType, isNativeTag, componentName);
             Object.assign(props, modelHandlers.props);
             Object.assign(eventHandlers, modelHandlers.events);
           } else {
@@ -860,7 +869,9 @@ export class Renderer {
     modelExpression: string,
     runtimeContext: RuntimeContext,
     evalContext: EvaluationContext,
-    inputType?: string
+    inputType?: string,
+    isNativeTag: boolean = true,
+    componentName?: string
   ): { props: Record<string, any>; events: Record<string, Function> } {
     // 确保 modelExpression 是字符串
     if (typeof modelExpression !== 'string') {
@@ -874,6 +885,26 @@ export class Renderer {
     // 获取当前值
     const currentValue = this.evaluator.evaluate(modelPath, evalContext);
     const value = currentValue.success ? currentValue.value : '';
+
+    // 组件模型绑定适配器（通用机制，核心不感知任何具体 UI 库/组件名）：
+    // 某些组件对 value 类型有特殊要求（如时间/日期选择器的 value 必须是时间戳|null，
+    // 空串或字符串会导致其内部格式化抛错）。消费方可通过 config.modelAdapters 为组件名
+    // 注册适配器，指定改用哪个 prop/event，以及状态为空时应传入组件的值。
+    const adapter = componentName ? this.modelAdapters[componentName] : undefined;
+    if (adapter && (!adapter.when || adapter.when(value))) {
+      const isEmpty = value === '' || value === null || value === undefined;
+      const prop = adapter.prop || 'value';
+      const event = adapter.event || `onUpdate:${prop}`;
+      const boundValue = isEmpty && 'emptyValue' in adapter ? adapter.emptyValue : value;
+      return {
+        props: { [prop]: boundValue },
+        events: {
+          [event]: (newValue: any) => {
+            this.setStateByPath(runtimeContext.state, modelPath, newValue ?? '');
+          },
+        },
+      };
+    }
 
     // checkbox 特殊处理
     if (inputType === 'checkbox') {
@@ -905,19 +936,24 @@ export class Renderer {
 
     // 根据 lazy 修饰符决定使用哪个事件
     const events: Record<string, Function> = {};
-    
-    if (modifiers.lazy) {
-      // lazy 模式：使用 change 事件
-      events.onChange = (event: Event | any) => {
-        const newValue = event?.target?.value ?? event;
-        this.setStateByPath(runtimeContext.state, modelPath, transformValue(newValue));
-      };
-    } else {
-      // 默认模式：使用 input 事件
-      events.onInput = (event: Event | any) => {
-        const newValue = event?.target?.value ?? event;
-        this.setStateByPath(runtimeContext.state, modelPath, transformValue(newValue));
-      };
+
+    // 仅原生 HTML 标签（input/textarea/select）才绑定原生 DOM 事件；
+    // Vue 组件统一走下面的 onUpdate:modelValue / onUpdate:value，
+    // 避免组件内部原生 input 事件冒泡导致的值类型错乱（如 NInputNumber 无法输入）。
+    if (isNativeTag) {
+      if (modifiers.lazy) {
+        // lazy 模式：使用 change 事件
+        events.onChange = (event: Event | any) => {
+          const newValue = event?.target?.value ?? event;
+          this.setStateByPath(runtimeContext.state, modelPath, transformValue(newValue));
+        };
+      } else {
+        // 默认模式：使用 input 事件
+        events.onInput = (event: Event | any) => {
+          const newValue = event?.target?.value ?? event;
+          this.setStateByPath(runtimeContext.state, modelPath, transformValue(newValue));
+        };
+      }
     }
 
     // 兼容 Vue 组件的 update 事件

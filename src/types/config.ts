@@ -47,6 +47,26 @@ export interface ResponseFormatConfig {
 }
 
 /**
+ * 组件模型绑定适配器（通用机制，不含任何具体 UI 库/组件名）
+ *
+ * 用于覆盖某个组件的 v-model 默认绑定方式。默认情况下渲染器把 model 绑到
+ * `value`/`modelValue` 并监听 `onUpdate:value`/`onUpdate:modelValue`。
+ * 当某些组件对值的类型有特殊要求（例如时间/日期选择器的 value 必须是时间戳|null，
+ * 空串或字符串会导致内部格式化报错）时，消费方可为该组件名注册适配器，
+ * 指定改用哪个 prop/event，以及状态为空时应传入组件的值。
+ */
+export interface ModelAdapter {
+  /** 绑定的 prop 名，默认 'value'（同时也会作为 modelValue 的替代） */
+  prop?: string;
+  /** 更新事件名，默认 `onUpdate:${prop}` */
+  event?: string;
+  /** 当状态值为空（''/null/undefined）时传给组件的值，默认沿用原值（通常为 ''） */
+  emptyValue?: any;
+  /** 仅当该断言返回 true 时才启用此适配器；不设则总是启用 */
+  when?: (value: any) => boolean;
+}
+
+/**
  * Global configuration for the JSON Renderer plugin
  */
 export interface GlobalConfig {
@@ -75,6 +95,12 @@ export interface GlobalConfig {
 
   /** Default headers for all API requests */
   defaultHeaders?: Record<string, string>;
+
+  /**
+   * 组件模型绑定适配器表：组件名 -> 适配器。
+   * 通用机制，具体 UI 库（如 naive-ui）的组件绑定策略由消费方注册。
+   */
+  modelAdapters?: Record<string, ModelAdapter>;
 }
 
 /**

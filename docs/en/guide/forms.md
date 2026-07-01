@@ -426,6 +426,46 @@ Object format also supports modifiers:
 }
 ```
 
+## Component-specific Binding (modelAdapters)
+
+Some third-party components have special requirements for the value type bound via `model`, and the default `value` binding will fail. A typical example is naive-ui's time/date pickers: the `value` of `NTimePicker`/`NDatePicker` must be a **timestamp or `null`**. Binding a string (e.g. `"09:00:00"`) or an empty string to `value` makes their internal formatter throw `RangeError: Invalid time value`.
+
+For such components, register a binding policy via [`modelAdapters`](/en/api/config#modeladapters) when installing the plugin, so it uses the prop that accepts strings (naive-ui pickers use `formatted-value`) and coerces empty values to `null`:
+
+```typescript
+app.use(createVSchemaPlugin({
+  modelAdapters: {
+    NTimePicker: {
+      prop: 'formatted-value',
+      event: 'onUpdate:formattedValue',
+      emptyValue: null,
+      when: (v) => typeof v === 'string' || v == null,
+    },
+    NDatePicker: {
+      prop: 'formatted-value',
+      event: 'onUpdate:formattedValue',
+      emptyValue: null,
+      when: (v) => typeof v === 'string' || v == null,
+    },
+  },
+}));
+```
+
+After registration, you can bind string time/date values just like any other field in the schema:
+
+```json
+{
+  "data": { "form": { "time": "" } },
+  "com": "NTimePicker",
+  "model": "form.time",
+  "props": { "format": "HH:mm:ss" }
+}
+```
+
+::: tip Note
+The stored string must match the component's `format`/`value-format`. For example, `NTimePicker` defaults `format` to `HH:mm:ss`; if you only store `"09:00"`, also set `format`/`value-format` to `HH:mm`.
+:::
+
 ## Using with UI Libraries
 
 ### Element Plus

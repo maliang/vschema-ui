@@ -59,6 +59,7 @@ export function createVSchema(options: GlobalConfig & {
   const renderer = new Renderer({
     registry,
     fetcher,
+    modelAdapters: options.modelAdapters,
   });
 
   // 创建解析器

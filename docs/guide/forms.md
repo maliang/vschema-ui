@@ -527,6 +527,46 @@ VSchema 支持三种修饰符，可以追加在绑定路径后面：
 }
 ```
 
+## 组件专属绑定（modelAdapters）
+
+某些第三方组件对 `model` 绑定的值类型有特殊要求，直接用默认的 `value` 绑定会出错。典型例子是 naive-ui 的时间/日期选择器：`NTimePicker`/`NDatePicker` 的 `value` 必须是**时间戳或 `null`**，若把字符串（如 `"09:00:00"`）或空串绑到 `value`，其内部会抛出 `RangeError: Invalid time value`。
+
+对这类组件，应在插件初始化时通过 [`modelAdapters`](/api/config#modeladapters) 注册绑定策略，让它改用组件支持字符串的 prop（naive-ui picker 用 `formatted-value`），并把空值转为 `null`：
+
+```typescript
+app.use(createVSchemaPlugin({
+  modelAdapters: {
+    NTimePicker: {
+      prop: 'formatted-value',
+      event: 'onUpdate:formattedValue',
+      emptyValue: null,
+      when: (v) => typeof v === 'string' || v == null,
+    },
+    NDatePicker: {
+      prop: 'formatted-value',
+      event: 'onUpdate:formattedValue',
+      emptyValue: null,
+      when: (v) => typeof v === 'string' || v == null,
+    },
+  },
+}));
+```
+
+注册后，schema 里就能像普通字段一样绑定字符串时间/日期：
+
+```json
+{
+  "data": { "form": { "time": "" } },
+  "com": "NTimePicker",
+  "model": "form.time",
+  "props": { "format": "HH:mm:ss" }
+}
+```
+
+::: tip 提示
+存储的字符串需与组件的 `format`/`value-format` 一致。例如 `NTimePicker` 默认 `format` 为 `HH:mm:ss`，若只存 `"09:00"` 请同时设置 `format`/`value-format` 为 `HH:mm`。
+:::
+
 ## 与 UI 组件库配合
 
 ### Element Plus

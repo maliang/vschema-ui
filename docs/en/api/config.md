@@ -156,6 +156,51 @@ errorInterceptor: (error) => {
 }
 ```
 
+### modelAdapters
+
+- Type: `Record<string, ModelAdapter>`
+- Default: `{}`
+
+Component model-binding adapter map (component name → adapter). Overrides how a component's `model` (v-model) is bound.
+
+By default the renderer binds `model` to a component's `value`/`modelValue` and listens to `onUpdate:value`/`onUpdate:modelValue`. When a component has special value-type requirements (e.g. naive-ui's time/date pickers require the `value` to be a timestamp or `null`; binding a string or empty string makes their internal formatter throw `RangeError: Invalid time value`), register an adapter for that component name to choose a different prop/event and the value passed when the state is empty.
+
+::: tip Generic mechanism
+The vschema-ui core is agnostic of any specific UI library's component names. `modelAdapters` is just a generic extension point; the binding policy for a specific UI library (e.g. naive-ui) is registered by the consumer.
+:::
+
+**ModelAdapter fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `prop` | `string` | Prop name to bind, default `'value'` |
+| `event` | `string` | Update event name, default `onUpdate:${prop}` |
+| `emptyValue` | `any` | Value passed to the component when the state is empty (`''`/`null`/`undefined`); defaults to the original value |
+| `when` | `(value: any) => boolean` | Enable the adapter only when it returns `true`; always enabled if omitted |
+
+**Example (naive-ui time/date pickers):**
+
+```typescript
+app.use(createVSchemaPlugin({
+  modelAdapters: {
+    NTimePicker: {
+      prop: 'formatted-value',
+      event: 'onUpdate:formattedValue',
+      emptyValue: null,
+      when: (v) => typeof v === 'string' || v == null,
+    },
+    NDatePicker: {
+      prop: 'formatted-value',
+      event: 'onUpdate:formattedValue',
+      emptyValue: null,
+      when: (v) => typeof v === 'string' || v == null,
+    },
+  },
+}));
+```
+
+With this, binding string time/date values or empty values to `NTimePicker`/`NDatePicker` no longer throws `RangeError: Invalid time value`.
+
 ## Type Definition
 
 ```typescript
@@ -190,6 +235,22 @@ interface RequestConfig {
   method: string;
   headers: Record<string, string>;
   body?: any;
+  /** Response type: json (default), text, blob, arrayBuffer */
+  responseType?: 'json' | 'text' | 'blob' | 'arrayBuffer';
+}
+
+/**
+ * Component model-binding adapter
+ */
+interface ModelAdapter {
+  /** Prop name to bind, default 'value' */
+  prop?: string;
+  /** Update event name, default `onUpdate:${prop}` */
+  event?: string;
+  /** Value passed to the component when the state is empty (''/null/undefined); defaults to the original value */
+  emptyValue?: any;
+  /** Enable the adapter only when it returns true; always enabled if omitted */
+  when?: (value: any) => boolean;
 }
 
 /**
@@ -203,5 +264,6 @@ interface GlobalConfig {
   requestInterceptor?: (config: RequestConfig) => RequestConfig | Promise<RequestConfig>;
   responseInterceptor?: (response: any) => any | Promise<any>;
   errorInterceptor?: (error: any) => any | Promise<any>;
+  modelAdapters?: Record<string, ModelAdapter>;
   components?: Record<string, Component>;
 }
