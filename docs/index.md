@@ -31,6 +31,9 @@ features:
   - icon: 🌐
     title: API 调用
     details: 内置 fetch 动作和 initApi/uiApi 配置，轻松对接后端
+  - icon: 🧩
+    title: 组件适配器
+    details: 通过 modelAdapters 适配第三方组件的 v-model 绑定差异，例如 Naive UI 日期时间组件
   - icon: 🔒
     title: 安全可靠
     details: 内置表达式安全检查，防止 XSS 攻击

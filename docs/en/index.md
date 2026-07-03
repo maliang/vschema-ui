@@ -31,6 +31,9 @@ features:
   - icon: 🌐
     title: API Integration
     details: Built-in fetch action and initApi/uiApi configuration for backend integration
+  - icon: 🧩
+    title: Component Adapters
+    details: Adapt third-party component v-model differences with modelAdapters, such as Naive UI date/time pickers
   - icon: 🔒
     title: Security
     details: Built-in expression security checks to prevent XSS attacks
